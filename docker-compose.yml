@@ -1,0 +1,15 @@
+services:
+  bot:
+    build: .
+    env_file: .env
+    volumes:
+      # Persistent SQLite database
+      - ./data:/app/data
+      # Service Account JSON (read-only inside container)
+      - ./credentials:/app/credentials:ro
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
