@@ -56,6 +56,13 @@ def _map_columns(headers: list[str]) -> dict[str, int]:
     return mapping
 
 
+def _pad_row(raw: list, min_len: int) -> list:
+    """Extend a row with empty strings so column indices are always reachable."""
+    if len(raw) >= min_len:
+        return list(raw)
+    return list(raw) + [""] * (min_len - len(raw))
+
+
 def _rows_from_values(all_values: list[list[str]]) -> list[SheetRow]:
     if not all_values:
         return []
@@ -77,18 +84,33 @@ def _rows_from_values(all_values: list[list[str]]) -> list[SheetRow]:
     max_idx = max(s_idx, q_idx, a_idx)
 
     rows: list[SheetRow] = []
-    for raw in all_values[1:]:
-        if len(raw) <= max_idx:
+    skipped_empty = 0
+    for line_no, raw in enumerate(all_values[1:], start=2):
+        if not any(str(cell).strip() for cell in raw):
             continue
-        answer = str(raw[a_idx]).strip()
+        padded = _pad_row(raw, max_idx + 1)
+        answer = str(padded[a_idx]).strip()
         if not answer:
+            skipped_empty += 1
+            logger.debug(
+                "Skipped sheet row %d: empty answer (columns=%s).",
+                line_no,
+                padded[: max_idx + 1],
+            )
             continue
         rows.append(
             SheetRow(
-                section=str(raw[s_idx]).strip(),
-                question=str(raw[q_idx]).strip(),
+                section=str(padded[s_idx]).strip(),
+                question=str(padded[q_idx]).strip(),
                 answer=answer,
             )
+        )
+
+    if skipped_empty:
+        logger.info(
+            "Parsed %d KB rows; skipped %d rows with empty answer.",
+            len(rows),
+            skipped_empty,
         )
     return rows
 
@@ -161,3 +183,15 @@ class GoogleSheetsClient:
 
         logger.info("Fetched %d rows from %s.", len(rows), spreadsheet_id)
         return rows
+
+    def get_drive_file_info(self, file_id: str) -> dict[str, str]:
+        """Return Drive metadata for the spreadsheet (modifiedTime, name)."""
+        try:
+            service = build("drive", "v3", credentials=self._get_credentials())
+            return service.files().get(
+                fileId=file_id,
+                fields="modifiedTime,name,md5Checksum",
+            ).execute()
+        except Exception as exc:
+            logger.warning("Could not fetch Drive metadata for %s: %s", file_id, exc)
+            return {}

@@ -111,3 +111,17 @@ def test_contact_lookup():
     results = search("поставки кто отвечает контакт", kb)
     assert len(results) > 0
     assert any("Контакты" in r.entry.section for r in results)
+
+
+def test_putin_question_exact_match():
+    kb = make_kb() + [
+        SheetRow(
+            section="23. Возражения и экономика",
+            question="Кто такой Путин?",
+            answer="Это Пал Лаич. Захватил страну 26 лет назад.",
+        ),
+    ]
+    results = search("Кто такой путин", kb)
+    assert len(results) > 0
+    assert results[0].entry.question == "Кто такой Путин?"
+    assert results[0].score >= 10.0

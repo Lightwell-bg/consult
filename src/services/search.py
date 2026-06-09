@@ -10,8 +10,13 @@ _STOP_WORDS = {
     "все", "так", "он", "она", "они", "мы", "вы", "я", "его", "её",
     "ее", "их", "есть", "был", "была", "были", "быть", "там", "тут",
     "здесь", "который", "которая", "которые", "которого",
+    "кто", "такой", "такая", "такое", "такие", "таким", "такого",
     "the", "a", "an", "is", "are", "was", "were", "of", "to", "in",
 }
+
+
+def _normalize_text(text: str) -> str:
+    return re.sub(r"[^\wа-яё]+", " ", text.lower()).strip()
 
 
 def _tokenize(text: str) -> set[str]:
@@ -45,10 +50,11 @@ def search(
         return []
 
     query_tokens = _tokenize(query)
-    if not query_tokens:
+    query_norm = _normalize_text(query)
+    if not query_tokens and not query_norm:
         return []
 
-    n = len(query_tokens)
+    n = max(len(query_tokens), 1)
     results: list[SearchResult] = []
 
     for entry in entries:
@@ -57,6 +63,14 @@ def search(
         a_overlap = len(query_tokens & _tokenize(entry.answer)) / n
 
         score = q_overlap * 3.0 + s_overlap * 1.5 + a_overlap * 1.0
+
+        entry_norm = _normalize_text(entry.question)
+        if query_norm and entry_norm:
+            if query_norm == entry_norm:
+                score += 10.0
+            elif query_norm in entry_norm or entry_norm in query_norm:
+                score += 5.0
+
         if score > 0:
             results.append(SearchResult(entry=entry, score=score))
 

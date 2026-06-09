@@ -45,6 +45,19 @@ def test_fetch_rows_standard_headers():
     assert rows[1].section == "Прайс"
 
 
+def test_fetch_rows_pads_short_row():
+    """Rows shorter than max column index are padded instead of skipped."""
+    values = [
+        ["Раздел", "Вопрос / тема", "Ответ / информация"],
+        ["FAQ", "Короткая строка"],  # answer column missing — padded to empty → skip
+        ["FAQ", "С ответом", "Ответ есть"],
+    ]
+    client = _make_client_with_data(values)
+    rows = client.fetch_rows("fake_id")
+    assert len(rows) == 1
+    assert rows[0].question == "С ответом"
+
+
 def test_fetch_rows_skips_empty_answer():
     values = [
         ["Раздел", "Вопрос / тема", "Ответ / информация"],

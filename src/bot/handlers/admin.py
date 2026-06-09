@@ -60,11 +60,20 @@ async def cmd_reload(
 ) -> None:
     await message.answer("⏳ Обновляю базу знаний...")
     spreadsheet_id = await repo.get_setting("spreadsheet_id")
+    prev_count = int(await repo.get_setting("kb_entry_count", "0"))
     try:
+        meta = await kb.get_source_metadata(spreadsheet_id)
         count = await kb.sync(spreadsheet_id)
         await repo.set_setting("last_kb_sync", datetime.now().isoformat())
         await repo.set_setting("kb_entry_count", str(count))
-        await message.answer(f"✅ База знаний обновлена. Загружено записей: {count}")
+        lines = [f"✅ База знаний обновлена. Загружено записей: {count}"]
+        if prev_count and prev_count != count:
+            delta = count - prev_count
+            sign = "+" if delta > 0 else ""
+            lines.append(f"Изменение: {sign}{delta} (было {prev_count})")
+        if meta.get("modifiedTime"):
+            lines.append(f"📄 Файл на Drive: {meta['modifiedTime']}")
+        await message.answer("\n".join(lines))
     except Exception as exc:
         await record_critical(repo, "reload", str(exc))
         await message.answer(f"❌ Ошибка при обновлении базы знаний:\n{exc}")

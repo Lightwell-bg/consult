@@ -44,6 +44,13 @@ class KnowledgeBase:
             logger.info("KnowledgeBase synced: %d entries.", len(rows))
             return len(rows)
 
+    async def get_source_metadata(self, spreadsheet_id: str) -> dict[str, str]:
+        """Drive file metadata (modifiedTime, name) for sync diagnostics."""
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            None, self._client.get_drive_file_info, spreadsheet_id
+        )
+
     def load_from_rows(self, rows: list[SheetRow]) -> None:
         """Load KB from a pre-built list (used in tests)."""
         self._entries = list(rows)

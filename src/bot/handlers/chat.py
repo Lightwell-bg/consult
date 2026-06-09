@@ -51,6 +51,13 @@ async def handle_chat(
     threshold = float(await repo.get_setting("search_threshold", "0.1"))
     results = search(question, kb.entries, top_k=top_k, threshold=threshold)
     use_fallback = len(results) == 0
+    if use_fallback:
+        logger.info(
+            "KB search miss: query=%r entries=%d threshold=%s",
+            question,
+            kb.entry_count,
+            threshold,
+        )
 
     # Conversation history
     max_ctx = int(await repo.get_setting("max_context_messages", "10"))
