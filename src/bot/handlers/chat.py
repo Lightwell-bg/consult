@@ -7,8 +7,9 @@ from ...db.repository import Repository
 from ...services.anthropic_client import AnthropicClient
 from ...services.context import get_context, save_exchange
 from ...services.knowledge_base import KnowledgeBase
+from ...services.admin_notify import notify_admins_kb_miss
 from ...services.critical_log import record_critical
-from ...services.search import search
+from ...services.search import is_confident_match, search
 from ...services.telegram_format import send_formatted
 
 logger = logging.getLogger(__name__)
@@ -50,14 +51,30 @@ async def handle_chat(
     top_k = int(await repo.get_setting("search_top_k", "8"))
     threshold = float(await repo.get_setting("search_threshold", "0.1"))
     results = search(question, kb.entries, top_k=top_k, threshold=threshold)
-    use_fallback = len(results) == 0
+    confident_min = float(
+        await repo.get_setting("search_confident_threshold", "1.5")
+    )
+    use_fallback = not is_confident_match(results, confident_min)
     if use_fallback:
+        top_score = results[0].score if results else 0.0
         logger.info(
-            "KB search miss: query=%r entries=%d threshold=%s",
+            "KB miss: query=%r entries=%d top_score=%.2f confident_min=%s",
             question,
             kb.entry_count,
-            threshold,
+            top_score,
+            confident_min,
         )
+        from_user = message.from_user
+        sent = await notify_admins_kb_miss(
+            message.bot,
+            repo,
+            question=question,
+            asker_id=user_id,
+            tg_first_name=getattr(from_user, "first_name", "") or "" if from_user else "",
+            tg_username=getattr(from_user, "username", None) if from_user else None,
+        )
+        logger.info("KB miss: admin notifications sent=%d", sent)
+        results = []
 
     # Conversation history
     max_ctx = int(await repo.get_setting("max_context_messages", "10"))

@@ -81,3 +81,11 @@ def search(
         return []
 
     return top
+
+
+def is_confident_match(
+    results: list[SearchResult],
+    min_score: float = 1.5,
+) -> bool:
+    """True when search found a reasonably relevant KB entry."""
+    return bool(results) and results[0].score >= min_score

@@ -1,6 +1,6 @@
 import pytest
 from src.services.google_sheets import SheetRow
-from src.services.search import search, SearchResult, _tokenize
+from src.services.search import search, SearchResult, _tokenize, is_confident_match
 
 
 # ------------------------------------------------------------------ helpers
@@ -111,6 +111,14 @@ def test_contact_lookup():
     results = search("поставки кто отвечает контакт", kb)
     assert len(results) > 0
     assert any("Контакты" in r.entry.section for r in results)
+
+
+def test_is_confident_match_weak_result():
+    kb = make_kb()
+    weak = search("кофе", kb, threshold=0.1)
+    assert weak
+    assert is_confident_match(weak, min_score=999.0) is False
+    assert is_confident_match([], min_score=1.5) is False
 
 
 def test_putin_question_exact_match():

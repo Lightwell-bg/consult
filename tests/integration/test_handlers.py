@@ -102,6 +102,7 @@ async def test_status_shows_kb_state():
 async def test_chat_calls_ai_and_replies():
     from unittest.mock import patch
     from src.bot.handlers.chat import handle_chat
+    from src.services.google_sheets import SheetRow
     from src.services.knowledge_base import KnowledgeBase
     from src.services.anthropic_client import AnthropicClient
 
@@ -109,7 +110,9 @@ async def test_chat_calls_ai_and_replies():
 
     kb = MagicMock(spec=KnowledgeBase)
     kb.is_loaded.return_value = True
-    kb.entries = []
+    kb.entries = [
+        SheetRow("FAQ", "Расскажи про арабику", "Арабика — мягкий сорт кофе."),
+    ]
 
     repo = AsyncMock()
     repo.get_setting = AsyncMock(return_value="8")
@@ -121,10 +124,14 @@ async def test_chat_calls_ai_and_replies():
     ai_client.ask = AsyncMock(return_value="## ☕ Арабика\n\n**Мягкий** сорт кофе.")
 
     with patch("src.bot.handlers.chat.send_formatted", new_callable=AsyncMock) as mock_send:
-        await handle_chat(msg, repo=repo, kb=kb, ai_client=ai_client)
+        with patch(
+            "src.bot.handlers.chat.notify_admins_kb_miss", new_callable=AsyncMock
+        ) as mock_notify:
+            await handle_chat(msg, repo=repo, kb=kb, ai_client=ai_client)
 
     mock_send.assert_called_once_with(msg, "## ☕ Арабика\n\n**Мягкий** сорт кофе.")
     ai_client.ask.assert_called_once()
+    mock_notify.assert_not_awaited()
 
 
 async def test_chat_uses_fallback_when_no_kb_results():
@@ -149,8 +156,12 @@ async def test_chat_uses_fallback_when_no_kb_results():
     ai_client.ask = AsyncMock(return_value="Нет данных в базе знаний.")
 
     with patch("src.bot.handlers.chat.send_formatted", new_callable=AsyncMock):
-        await handle_chat(msg, repo=repo, kb=kb, ai_client=ai_client)
+        with patch(
+            "src.bot.handlers.chat.notify_admins_kb_miss", new_callable=AsyncMock
+        ) as mock_notify:
+            await handle_chat(msg, repo=repo, kb=kb, ai_client=ai_client)
 
+    mock_notify.assert_awaited_once()
     # Verify fallback=True was passed
     call_kwargs = ai_client.ask.call_args[1]
     assert call_kwargs.get("use_fallback") is True
