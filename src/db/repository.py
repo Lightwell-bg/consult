@@ -92,6 +92,15 @@ class Repository:
                 rows = await cur.fetchall()
         return [_row_to_user(r) for r in rows]
 
+    async def list_admins(self) -> list[User]:
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                "SELECT telegram_id, is_admin, name, created_at FROM users "
+                "WHERE is_admin = 1 ORDER BY name, created_at"
+            ) as cur:
+                rows = await cur.fetchall()
+        return [_row_to_user(r) for r in rows]
+
     async def count_admins(self) -> int:
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(

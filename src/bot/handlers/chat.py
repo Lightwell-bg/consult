@@ -51,9 +51,7 @@ async def handle_chat(
     top_k = int(await repo.get_setting("search_top_k", "8"))
     threshold = float(await repo.get_setting("search_threshold", "0.1"))
     results = search(question, kb.entries, top_k=top_k, threshold=threshold)
-    confident_min = float(
-        await repo.get_setting("search_confident_threshold", "1.5")
-    )
+    confident_min = float(await repo.get_setting("search_confident_threshold", "1.5"))
     use_fallback = not is_confident_match(results, confident_min)
     if use_fallback:
         top_score = results[0].score if results else 0.0
@@ -70,7 +68,9 @@ async def handle_chat(
             repo,
             question=question,
             asker_id=user_id,
-            tg_first_name=getattr(from_user, "first_name", "") or "" if from_user else "",
+            tg_first_name=(
+                getattr(from_user, "first_name", "") or "" if from_user else ""
+            ),
             tg_username=getattr(from_user, "username", None) if from_user else None,
         )
         logger.info("KB miss: admin notifications sent=%d", sent)
@@ -83,7 +83,9 @@ async def handle_chat(
     # Ask Claude
     await message.bot.send_chat_action(message.chat.id, "typing")
     try:
-        answer = await ai_client.ask(question, results, history, use_fallback=use_fallback)
+        answer = await ai_client.ask(
+            question, results, history, use_fallback=use_fallback
+        )
     except Exception as exc:
         await record_critical(repo, "anthropic", str(exc))
         answer = (

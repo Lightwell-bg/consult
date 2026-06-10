@@ -39,7 +39,9 @@ async def main() -> None:
         await repo.set_setting("kb_entry_count", str(count))
         logger.info("Initial KB sync: %d entries.", count)
     except Exception as exc:
-        logger.warning("Initial KB sync failed: %s. Bot will retry on first request.", exc)
+        logger.warning(
+            "Initial KB sync failed: %s. Bot will retry on first request.", exc
+        )
         await record_critical(repo, "startup_sync", str(exc))
 
     # Set up periodic sync if configured

@@ -31,15 +31,16 @@ async def test_notify_admins_kb_miss_sends_to_all_admins():
     bot.send_message = AsyncMock()
 
     repo = AsyncMock()
-    repo.list_users = AsyncMock(
+    repo.list_admins = AsyncMock(
         return_value=[
             User(telegram_id=100, is_admin=True, name="Admin1", created_at=MagicMock()),
             User(telegram_id=200, is_admin=True, name="Admin2", created_at=MagicMock()),
-            User(telegram_id=300, is_admin=False, name="User", created_at=MagicMock()),
         ]
     )
     repo.get_user = AsyncMock(
-        return_value=User(telegram_id=300, is_admin=False, name="Сотрудник", created_at=MagicMock())
+        return_value=User(
+            telegram_id=300, is_admin=False, name="Сотрудник", created_at=MagicMock()
+        )
     )
 
     sent = await notify_admins_kb_miss(
@@ -51,9 +52,12 @@ async def test_notify_admins_kb_miss_sends_to_all_admins():
 
     assert sent == 2
     assert bot.send_message.await_count == 2
-    notified_ids = {call.args[0] for call in bot.send_message.call_args_list}
+    notified_ids = {
+        call.kwargs.get("chat_id", call.args[0] if call.args else None)
+        for call in bot.send_message.call_args_list
+    }
     assert notified_ids == {100, 200}
-    body = bot.send_message.call_args_list[0].args[1]
+    body = bot.send_message.call_args_list[0].kwargs["text"]
     assert "Неизвестный вопрос" in body
     assert "Сотрудник" in body
 
@@ -62,11 +66,9 @@ async def test_notify_admins_kb_miss_sends_to_all_admins():
 async def test_notify_admins_kb_miss_no_admins():
     bot = AsyncMock()
     repo = AsyncMock()
-    repo.list_users = AsyncMock(return_value=[])
+    repo.list_admins = AsyncMock(return_value=[])
 
-    sent = await notify_admins_kb_miss(
-        bot, repo, question="Q", asker_id=1
-    )
+    sent = await notify_admins_kb_miss(bot, repo, question="Q", asker_id=1)
 
     assert sent == 0
     bot.send_message.assert_not_called()
@@ -78,13 +80,20 @@ async def test_notify_admins_kb_miss_includes_asker_when_admin():
     bot.send_message = AsyncMock()
 
     repo = AsyncMock()
-    repo.list_users = AsyncMock(
+    repo.list_admins = AsyncMock(
         return_value=[
-            User(telegram_id=100, is_admin=True, name="Solo Admin", created_at=MagicMock()),
+            User(
+                telegram_id=100,
+                is_admin=True,
+                name="Solo Admin",
+                created_at=MagicMock(),
+            ),
         ]
     )
     repo.get_user = AsyncMock(
-        return_value=User(telegram_id=100, is_admin=True, name="Solo Admin", created_at=MagicMock())
+        return_value=User(
+            telegram_id=100, is_admin=True, name="Solo Admin", created_at=MagicMock()
+        )
     )
 
     sent = await notify_admins_kb_miss(
@@ -93,5 +102,5 @@ async def test_notify_admins_kb_miss_includes_asker_when_admin():
 
     assert sent == 1
     bot.send_message.assert_awaited_once()
-    assert bot.send_message.call_args.args[0] == 100
-    assert "Тестовый вопрос" in bot.send_message.call_args.args[1]
+    assert bot.send_message.call_args.kwargs["chat_id"] == 100
+    assert "Тестовый вопрос" in bot.send_message.call_args.kwargs["text"]

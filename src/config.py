@@ -18,7 +18,9 @@ class Config:
 def load_config() -> Config:
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     if not token:
-        raise ValueError("TELEGRAM_BOT_TOKEN is required. Set it in .env or environment.")
+        raise ValueError(
+            "TELEGRAM_BOT_TOKEN is required. Set it in .env or environment."
+        )
     return Config(
         telegram_bot_token=token,
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""),

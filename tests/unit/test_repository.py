@@ -58,6 +58,15 @@ async def test_remove_user(repo):
     assert removed_again is False
 
 
+async def test_list_admins(repo):
+    await repo.add_user(10001, is_admin=False, name="User")
+    await repo.add_user(10002, is_admin=True, name="Admin")
+    admins = await repo.list_admins()
+    assert len(admins) == 1
+    assert admins[0].telegram_id == 10002
+    assert admins[0].is_admin is True
+
+
 async def test_list_users(repo):
     await repo.add_user(10001)
     await repo.add_user(10002, is_admin=True)

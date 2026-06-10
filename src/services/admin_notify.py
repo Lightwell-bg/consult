@@ -68,11 +68,12 @@ async def notify_admins_kb_miss(
     tg_username: str | None = None,
 ) -> int:
     """
-    Send a KB-miss alert to every administrator.
+    Send a KB-miss alert to every administrator in their private chat with this bot.
 
-    Returns the number of admins successfully notified.
+    In Telegram private chats ``chat_id`` equals the user's Telegram ID — the same
+    bot that answers employees can message admins directly; no second bot is needed.
     """
-    admins = [u for u in await repo.list_users() if u.is_admin]
+    admins = await repo.list_admins()
     if not admins:
         logger.warning(
             "KB miss for asker %s but no admins in DB — notification skipped.",
@@ -100,12 +101,15 @@ async def notify_admins_kb_miss(
     sent = 0
     for admin in admins:
         try:
-            await bot.send_message(admin.telegram_id, text)
+            await bot.send_message(chat_id=admin.telegram_id, text=text)
             sent += 1
-            logger.info("KB miss alert sent to admin %s", admin.telegram_id)
+            logger.info(
+                "KB miss alert sent to admin %s (private chat)",
+                admin.telegram_id,
+            )
         except Exception as exc:
             logger.warning(
-                "Failed to notify admin %s about KB miss: %s",
+                "Failed to notify admin %s in private chat: %s",
                 admin.telegram_id,
                 exc,
             )
