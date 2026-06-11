@@ -1,4 +1,9 @@
-from src.services.telegram_format import markdown_to_telegram_html
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from aiogram.exceptions import TelegramBadRequest
+
+from src.services.telegram_format import markdown_to_telegram_html, safe_edit_text
 
 
 def test_header_becomes_bold():
@@ -38,6 +43,32 @@ def test_escapes_html_special_chars():
     result = markdown_to_telegram_html("Цена < 1000 & > 500")
     assert "&lt;" in result
     assert "&amp;" in result
+
+
+@pytest.mark.asyncio
+async def test_safe_edit_text_ignores_not_modified():
+    msg = MagicMock()
+    msg.edit_text = AsyncMock(
+        side_effect=TelegramBadRequest(
+            method=MagicMock(),
+            message="Bad Request: message is not modified",
+        )
+    )
+    await safe_edit_text(msg, "same text")
+    msg.edit_text.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_safe_edit_text_reraises_other_bad_request():
+    msg = MagicMock()
+    msg.edit_text = AsyncMock(
+        side_effect=TelegramBadRequest(
+            method=MagicMock(),
+            message="Bad Request: can't parse entities",
+        )
+    )
+    with pytest.raises(TelegramBadRequest):
+        await safe_edit_text(msg, "text", parse_mode="Markdown")
 
 
 def test_full_example_structure():

@@ -38,10 +38,26 @@ class AnthropicClient:
         self._model = model
         self._system_prompt = _load_prompt("system.md")
         self._fallback_prompt = _load_prompt("fallback.md")
+        self._ai_assist_prompt = _load_prompt("ai_assist.md")
 
     def reload_prompts(self) -> None:
         self._system_prompt = _load_prompt("system.md")
         self._fallback_prompt = _load_prompt("fallback.md")
+        self._ai_assist_prompt = _load_prompt("ai_assist.md")
+
+    def _resolve_system_prompt(self, answer_mode: str) -> str:
+        if answer_mode == "fallback":
+            system = self._fallback_prompt
+        elif answer_mode == "ai_assist":
+            system = self._ai_assist_prompt
+        else:
+            system = self._system_prompt
+        if not system:
+            return (
+                "Ты помощник отдела продаж. Отвечай только на основе "
+                "предоставленных данных базы знаний."
+            )
+        return system
 
     async def ask(
         self,
@@ -49,20 +65,18 @@ class AnthropicClient:
         kb_results: list[SearchResult],
         history: list[dict[str, str]],
         use_fallback: bool = False,
+        answer_mode: str | None = None,
     ) -> str:
         """
         Send a question to Claude with KB context and conversation history.
 
-        When use_fallback=True the fallback system prompt is used (no KB data found).
-        The history list contains previous {role, content} pairs (not including
-        the current question).
+        answer_mode: ``kb`` | ``fallback`` | ``ai_assist``.
+        ``use_fallback=True`` is equivalent to ``answer_mode='fallback'`` (legacy).
         """
-        system = self._fallback_prompt if use_fallback else self._system_prompt
-        if not system:
-            system = (
-                "Ты помощник отдела продаж. Отвечай только на основе "
-                "предоставленных данных базы знаний."
-            )
+        if answer_mode is None:
+            answer_mode = "fallback" if use_fallback else "kb"
+
+        system = self._resolve_system_prompt(answer_mode)
 
         kb_block = _build_kb_block(kb_results)
         user_content = question

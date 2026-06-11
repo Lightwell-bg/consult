@@ -121,6 +121,37 @@ def test_is_confident_match_weak_result():
     assert is_confident_match([], min_score=1.5) is False
 
 
+def test_rude_client_query_not_confident_on_generic_overlap():
+    """«Клиент … что делать» не должен цепляться за нерелевантную строку БЗ."""
+    kb = make_kb() + [
+        SheetRow(
+            section="Работа с клиентом",
+            question="Клиент согласился, но пропал и не отвечает. Что делать?",
+            answer="Написать повторно через 2 дня.",
+        ),
+    ]
+    query = "Клиент противный, материться. Что делать?"
+    results = search(query, kb)
+    assert results
+    assert is_confident_match(results, min_score=1.0, query=query) is False
+
+
+def test_paraphrased_dorogo_query_is_confident():
+    kb = [
+        SheetRow(
+            section="23. Возражения и экономика",
+            question="Клиент говорит «дорого». Как отвечать?",
+            answer="Считаем не за килограмм, а за чашку — разница в чашке копеечная.",
+        ),
+    ]
+    query = "Что ответить клиенту если он говорит что дорого?"
+    results = search(query, kb)
+    assert len(results) > 0
+    assert "дорого" in results[0].entry.question.lower()
+    assert is_confident_match(results, min_score=1.0, query=query)
+    assert results[0].score >= 1.5
+
+
 def test_putin_question_exact_match():
     kb = make_kb() + [
         SheetRow(

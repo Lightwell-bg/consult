@@ -6,6 +6,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from ...db.models import User
 from ...db.repository import Repository
+from ...services.telegram_format import safe_edit_text
 from ..commands import clear_user_commands, setup_commands_for_user
 from ..filters.admin import IsAdminFilter
 from ..states.config_states import ConfigStates
@@ -102,7 +103,7 @@ async def _render_users_list(message: Message, repo: Repository, page: int = 0, 
 
     kb = _users_list_keyboard(users, page=page)
     if edit:
-        await message.edit_text(text, parse_mode="Markdown", reply_markup=kb)
+        await safe_edit_text(message, text, parse_mode="Markdown", reply_markup=kb)
     else:
         await message.answer(text, parse_mode="Markdown", reply_markup=kb)
 
@@ -120,7 +121,8 @@ async def _show_user_card(message: Message, telegram_id: int, repo: Repository) 
         f"Роль: {role}\n"
         f"Добавлен: {user.created_at.strftime('%d.%m.%Y %H:%M')}"
     )
-    await message.edit_text(
+    await safe_edit_text(
+        message,
         text,
         parse_mode="Markdown",
         reply_markup=_user_card_keyboard(user.telegram_id, user.is_admin),
@@ -155,7 +157,8 @@ async def user_view(callback: CallbackQuery, repo: Repository) -> None:
 
 @router.callback_query(F.data == "usr:add")
 async def user_add_start(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.message.edit_text(
+    await safe_edit_text(
+        callback.message,
         "➕ *Добавление пользователя*\n\n"
         "Шаг 1 из 2. Введите *Telegram ID* нового сотрудника.\n"
         "Узнать ID можно командой /whoami.\n\n"
@@ -247,7 +250,8 @@ async def user_create(callback: CallbackQuery, state: FSMContext, repo: Reposito
     await state.clear()
 
     role = "администратор" if is_admin else "сотрудник"
-    await callback.message.edit_text(
+    await safe_edit_text(
+        callback.message,
         f"✅ *{name}* (`{telegram_id}`) добавлен как {role}.",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(
@@ -270,7 +274,8 @@ async def user_edit_name_start(callback: CallbackQuery, state: FSMContext, repo:
     await state.update_data(edit_user_id=telegram_id)
     await state.set_state(ConfigStates.waiting_edit_user_name)
     current = user.name or "не указано"
-    await callback.message.edit_text(
+    await safe_edit_text(
+        callback.message,
         f"✏️ *Изменение имени*\n\n"
         f"Пользователь: `{telegram_id}`\n"
         f"Текущее имя: {current}\n\n"

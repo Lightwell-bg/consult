@@ -11,6 +11,8 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "last_kb_sync": "",
     "kb_entry_count": "0",
     "log_retention_days": "30",
+    "search_confident_threshold": "1.0",
+    "kb_miss_mode": "kb_only",
 }
 
 _SCHEMA = """
@@ -65,4 +67,9 @@ async def init_db(db_path: str) -> None:
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
                 (key, value),
             )
+        # Earlier builds used 1.5 — paraphrased questions were wrongly treated as KB miss
+        await db.execute(
+            "UPDATE settings SET value = '1.0' "
+            "WHERE key = 'search_confident_threshold' AND value = '1.5'"
+        )
         await db.commit()

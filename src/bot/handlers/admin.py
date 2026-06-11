@@ -13,7 +13,13 @@ from aiogram.types import (
 
 from ...db.repository import Repository
 from ...services.critical_log import format_logs_for_telegram, record_critical
+from ...services.telegram_format import safe_edit_text
 from ...services.knowledge_base import KnowledgeBase
+from ...services.kb_miss_mode import (
+    KB_MISS_MODE_AI_ASSIST,
+    KB_MISS_MODE_KB_ONLY,
+    label_for_mode,
+)
 from ...services.scheduler import KBScheduler
 from ..filters.admin import IsAdminFilter
 from ..states.config_states import ConfigStates
@@ -33,8 +39,35 @@ def _config_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="🔄 Режим синхронизации", callback_data="cfg:sync_mode")],
             [InlineKeyboardButton(text="⏱ Интервал синхронизации (мин)", callback_data="cfg:interval")],
             [InlineKeyboardButton(text="💬 Контекст (макс. сообщений)", callback_data="cfg:context")],
+            [InlineKeyboardButton(text="🔎 Top-K поиска", callback_data="cfg:search_top_k")],
+            [
+                InlineKeyboardButton(
+                    text="🧠 Режим при отсутствии в БЗ",
+                    callback_data="cfg:kb_miss_mode",
+                )
+            ],
             [InlineKeyboardButton(text="📋 Текущие настройки", callback_data="cfg:show")],
             [InlineKeyboardButton(text="🗂 Хранение логов (дней)", callback_data="cfg:log_retention")],
+        ]
+    )
+
+
+def _kb_miss_mode_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Только база знаний",
+                    callback_data="cfg:kb_miss:kb_only",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="ИИ отвечает, если в БЗ нет",
+                    callback_data="cfg:kb_miss:ai_assist",
+                )
+            ],
+            [InlineKeyboardButton(text="← Назад", callback_data="cfg:back")],
         ]
     )
 
@@ -122,22 +155,28 @@ async def cfg_show(callback: CallbackQuery, repo: Repository) -> None:
         f"Интервал (мин): `{s.get('sync_interval_minutes', '—')}`\n"
         f"Макс. контекст (сообщений): `{s.get('max_context_messages', '—')}`\n"
         f"Top-K поиска: `{s.get('search_top_k', '—')}`\n"
+        f"Режим при отсутствии в БЗ: `{label_for_mode(s.get('kb_miss_mode', KB_MISS_MODE_KB_ONLY))}`\n"
         f"Хранение логов (дней): `{s.get('log_retention_days', '30')}`"
     )
-    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=_config_keyboard())
+    await safe_edit_text(
+        callback.message, text, parse_mode="Markdown", reply_markup=_config_keyboard()
+    )
     await callback.answer()
 
 
 @router.callback_query(F.data == "cfg:back")
 async def cfg_back(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
-    await callback.message.edit_text("⚙️ Настройки бота:", reply_markup=_config_keyboard())
+    await safe_edit_text(
+        callback.message, "⚙️ Настройки бота:", reply_markup=_config_keyboard()
+    )
     await callback.answer()
 
 
 @router.callback_query(F.data == "cfg:spreadsheet")
 async def cfg_ask_spreadsheet(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.message.edit_text(
+    await safe_edit_text(
+        callback.message,
         "Введите новый ID Google Таблицы:\n"
         "_Например: `15wtvU9GVkfNaCC3tMmAjJBqfmxtXQu7S`_\n\n"
         "Отправьте /cancel для отмены.",
@@ -149,7 +188,8 @@ async def cfg_ask_spreadsheet(callback: CallbackQuery, state: FSMContext) -> Non
 
 @router.callback_query(F.data == "cfg:sync_mode")
 async def cfg_ask_sync_mode(callback: CallbackQuery) -> None:
-    await callback.message.edit_text(
+    await safe_edit_text(
+        callback.message,
         "Выберите режим синхронизации базы знаний:",
         reply_markup=_sync_mode_keyboard(),
     )
@@ -185,15 +225,19 @@ async def cfg_set_sync_mode(
         scheduler.cancel_sync()
 
     label = {"on_request": "при каждом запросе", "scheduled": "по расписанию", "manual": "вручную"}.get(mode, mode)
-    await callback.message.edit_text(
-        f"✅ Режим синхронизации: *{label}*", parse_mode="Markdown", reply_markup=_config_keyboard()
+    await safe_edit_text(
+        callback.message,
+        f"✅ Режим синхронизации: *{label}*",
+        parse_mode="Markdown",
+        reply_markup=_config_keyboard(),
     )
     await callback.answer()
 
 
 @router.callback_query(F.data == "cfg:interval")
 async def cfg_ask_interval(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.message.edit_text(
+    await safe_edit_text(
+        callback.message,
         "Введите интервал синхронизации в *минутах* (целое число, например `10`):\n\n"
         "Отправьте /cancel для отмены.",
         parse_mode="Markdown",
@@ -204,7 +248,8 @@ async def cfg_ask_interval(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data == "cfg:log_retention")
 async def cfg_ask_log_retention(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.message.edit_text(
+    await safe_edit_text(
+        callback.message,
         "Введите срок хранения *критических* логов в днях (целое число, например `30`):\n\n"
         "Записи старше этого срока удаляются автоматически.\n\n"
         "Отправьте /cancel для отмены.",
@@ -216,13 +261,58 @@ async def cfg_ask_log_retention(callback: CallbackQuery, state: FSMContext) -> N
 
 @router.callback_query(F.data == "cfg:context")
 async def cfg_ask_context(callback: CallbackQuery, state: FSMContext) -> None:
-    await callback.message.edit_text(
+    await safe_edit_text(
+        callback.message,
         "Введите максимальное количество сообщений в контексте диалога "
         "(целое число, например `10`):\n\n"
         "Отправьте /cancel для отмены.",
         parse_mode="Markdown",
     )
     await state.set_state(ConfigStates.waiting_max_context)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "cfg:kb_miss_mode")
+async def cfg_ask_kb_miss_mode(callback: CallbackQuery) -> None:
+    await safe_edit_text(
+        callback.message,
+        "Выберите, что делать, если в базе знаний *нет подходящего ответа*:\n\n"
+        "• *Только база знаний* — сотруднику «нет в БЗ»; админу предупреждение и вопрос (без ответа).\n"
+        "• *ИИ отвечает* — сотруднику ответ ИИ; админу вопрос и полный текст этого ответа.",
+        parse_mode="Markdown",
+        reply_markup=_kb_miss_mode_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("cfg:kb_miss:"))
+async def cfg_set_kb_miss_mode(callback: CallbackQuery, repo: Repository) -> None:
+    mode = callback.data.split(":")[-1]
+    if mode not in (KB_MISS_MODE_KB_ONLY, KB_MISS_MODE_AI_ASSIST):
+        await callback.answer("Неизвестный режим.", show_alert=True)
+        return
+    await repo.set_setting("kb_miss_mode", mode)
+    await safe_edit_text(
+        callback.message,
+        f"✅ Режим при отсутствии в БЗ: *{label_for_mode(mode)}*",
+        parse_mode="Markdown",
+        reply_markup=_config_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "cfg:search_top_k")
+async def cfg_ask_search_top_k(callback: CallbackQuery, state: FSMContext) -> None:
+    await safe_edit_text(
+        callback.message,
+        "Введите *Top-K поиска* — сколько фрагментов базы знаний "
+        "передавать в AI (целое число, например `8`):\n\n"
+        "_Чем больше число, тем больше подсказок из таблицы; "
+        "обычно достаточно 6–10._\n\n"
+        "Отправьте /cancel для отмены.",
+        parse_mode="Markdown",
+    )
+    await state.set_state(ConfigStates.waiting_search_top_k)
     await callback.answer()
 
 
@@ -316,6 +406,29 @@ async def cfg_save_context(
     await state.clear()
     await message.answer(
         f"✅ Максимальный контекст: {count} сообщений.",
+        reply_markup=_config_keyboard(),
+    )
+
+
+@router.message(ConfigStates.waiting_search_top_k)
+async def cfg_save_search_top_k(
+    message: Message,
+    state: FSMContext,
+    repo: Repository,
+) -> None:
+    text = (message.text or "").strip()
+    try:
+        top_k = int(text)
+        if top_k < 1 or top_k > 20:
+            raise ValueError
+    except ValueError:
+        await message.answer("Введите целое число от 1 до 20. Или /cancel.")
+        return
+
+    await repo.set_setting("search_top_k", str(top_k))
+    await state.clear()
+    await message.answer(
+        f"✅ Top-K поиска: {top_k} фрагмент(ов) из базы знаний.",
         reply_markup=_config_keyboard(),
     )
 

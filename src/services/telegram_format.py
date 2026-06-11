@@ -72,3 +72,12 @@ async def send_formatted(message: Message, text: str) -> None:
         await message.answer(formatted, parse_mode=ParseMode.HTML)
     except TelegramBadRequest:
         await message.answer(text)
+
+
+async def safe_edit_text(message: Message, text: str, **kwargs) -> None:
+    """edit_text без падения, если Telegram считает сообщение неизменённым."""
+    try:
+        await message.edit_text(text, **kwargs)
+    except TelegramBadRequest as exc:
+        if "message is not modified" not in (exc.message or "").lower():
+            raise

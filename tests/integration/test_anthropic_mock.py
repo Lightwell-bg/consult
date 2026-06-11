@@ -105,6 +105,17 @@ async def test_ask_uses_fallback_system_prompt_when_flag_set():
     assert call_kwargs["system"] == "Fallback system prompt"
 
 
+async def test_ask_uses_ai_assist_system_prompt():
+    client = _make_client()
+    client._ai_assist_prompt = "AI assist system prompt"
+
+    with patch.object(client, "_client", client._mock_api):
+        await client.ask("Вопрос", [], [], answer_mode="ai_assist")
+
+    call_kwargs = client._mock_api.messages.create.call_args[1]
+    assert call_kwargs["system"] == "AI assist system prompt"
+
+
 async def test_ask_uses_normal_system_prompt_by_default():
     client = _make_client()
     client._system_prompt = "Normal system prompt"
