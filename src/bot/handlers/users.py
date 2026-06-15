@@ -1,6 +1,9 @@
+import html
 import logging
 
 from aiogram import F, Router
+from aiogram.enums import ParseMode
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
@@ -89,23 +92,25 @@ def _pick_role_keyboard() -> InlineKeyboardMarkup:
 async def _render_users_list(message: Message, repo: Repository, page: int = 0, *, edit: bool = False) -> None:
     users = await repo.list_users()
     if not users:
-        text = "👥 *Пользователи*\n\nСписок пуст. Добавьте первого сотрудника."
+        text = "👥 <b>Пользователи</b>\n\nСписок пуст. Добавьте первого сотрудника."
     else:
         lines = [
-            f"{'👑' if u.is_admin else '👤'} {_user_label(u)}"
+            f"{'👑' if u.is_admin else '👤'} {html.escape(_user_label(u))}"
             for u in users
         ]
         text = (
-            f"👥 *Пользователи* ({len(users)})\n\n"
+            f"👥 <b>Пользователи</b> ({len(users)})\n\n"
             + "\n".join(lines)
-            + "\n\n_Нажмите на имя для редактирования._"
+            + "\n\n<i>Нажмите на имя для редактирования.</i>"
         )
 
     kb = _users_list_keyboard(users, page=page)
     if edit:
-        await safe_edit_text(message, text, parse_mode="Markdown", reply_markup=kb)
+        await safe_edit_text(
+            message, text, parse_mode=ParseMode.HTML, reply_markup=kb
+        )
     else:
-        await message.answer(text, parse_mode="Markdown", reply_markup=kb)
+        await message.answer(text, parse_mode=ParseMode.HTML, reply_markup=kb)
 
 
 async def _show_user_card(message: Message, telegram_id: int, repo: Repository) -> None:
@@ -113,18 +118,18 @@ async def _show_user_card(message: Message, telegram_id: int, repo: Repository) 
     if not user:
         return
     role = "👑 Администратор" if user.is_admin else "👤 Сотрудник"
-    name_line = user.name if user.name else "_не указано_"
+    name_line = html.escape(user.name) if user.name else "<i>не указано</i>"
     text = (
-        f"*Пользователь*\n\n"
+        f"<b>Пользователь</b>\n\n"
         f"Имя: {name_line}\n"
-        f"Telegram ID: `{user.telegram_id}`\n"
+        f"Telegram ID: <code>{user.telegram_id}</code>\n"
         f"Роль: {role}\n"
         f"Добавлен: {user.created_at.strftime('%d.%m.%Y %H:%M')}"
     )
     await safe_edit_text(
         message,
         text,
-        parse_mode="Markdown",
+        parse_mode=ParseMode.HTML,
         reply_markup=_user_card_keyboard(user.telegram_id, user.is_admin),
     )
 
@@ -169,7 +174,10 @@ async def user_add_start(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.message(ConfigStates.waiting_add_user_id)
+_FSM_TEXT = F.text & ~F.text.startswith("/")
+
+
+@router.message(ConfigStates.waiting_add_user_id, _FSM_TEXT)
 async def user_add_id(message: Message, state: FSMContext, repo: Repository) -> None:
     text = (message.text or "").strip()
     try:
@@ -201,7 +209,7 @@ async def user_add_id(message: Message, state: FSMContext, repo: Repository) -> 
     )
 
 
-@router.message(ConfigStates.waiting_add_user_name)
+@router.message(ConfigStates.waiting_add_user_name, _FSM_TEXT)
 async def user_add_name(message: Message, state: FSMContext) -> None:
     name = (message.text or "").strip()
     if not name or len(name) > 100:
@@ -286,7 +294,7 @@ async def user_edit_name_start(callback: CallbackQuery, state: FSMContext, repo:
     await callback.answer()
 
 
-@router.message(ConfigStates.waiting_edit_user_name)
+@router.message(ConfigStates.waiting_edit_user_name, _FSM_TEXT)
 async def user_edit_name_save(message: Message, state: FSMContext, repo: Repository) -> None:
     name = (message.text or "").strip()
     if not name or len(name) > 100:

@@ -16,6 +16,7 @@ def _mock_worksheet(values: list[list[str]]):
 def _mock_spreadsheet(worksheet):
     sp = MagicMock()
     sp.get_worksheet.return_value = worksheet
+    sp.worksheets.return_value = [worksheet]
     return sp
 
 
@@ -24,6 +25,14 @@ def _make_client_with_data(values: list[list[str]]) -> GoogleSheetsClient:
     mock_gc = MagicMock()
     mock_gc.open_by_key.return_value = _mock_spreadsheet(_mock_worksheet(values))
     client._client = mock_gc
+    client._resolve_file_metadata = MagicMock(
+        return_value={
+            "name": "test-sheet",
+            "mimeType": "application/vnd.google-apps.spreadsheet",
+            "sourceType": "Google Таблица",
+            "modifiedTime": "2026-01-01T00:00:00Z",
+        }
+    )
     return client
 
 
@@ -117,6 +126,29 @@ def test_fetch_rows_english_headers():
     assert rows[0].answer == "A strong concentrated coffee."
 
 
+def test_fetch_rows_office_file_by_mime():
+    """Excel on Drive is read via Drive API without trying Sheets API first."""
+    from src.services.google_sheets import SheetRow
+
+    client = GoogleSheetsClient("fake_credentials.json")
+    client._resolve_file_metadata = MagicMock(
+        return_value={
+            "name": "kb.xlsx",
+            "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "sourceType": "Excel (.xlsx/.xls)",
+        }
+    )
+    fallback_rows = [SheetRow(section="FAQ", question="Q", answer="A")]
+
+    with patch.object(client, "_fetch_from_office_file", return_value=fallback_rows) as office:
+        with patch.object(client, "_fetch_from_native_sheet") as native:
+            rows = client.fetch_rows("fake_office_id")
+
+    assert len(rows) == 1
+    office.assert_called_once_with("fake_office_id")
+    native.assert_not_called()
+
+
 def test_fetch_rows_office_file_fallback():
     """When gspread fails with Office file error, fall back to Drive + openpyxl."""
     from unittest.mock import patch
@@ -124,6 +156,13 @@ def test_fetch_rows_office_file_fallback():
     from src.services.google_sheets import SheetRow
 
     client = GoogleSheetsClient("fake_credentials.json")
+    client._resolve_file_metadata = MagicMock(
+        return_value={
+            "name": "kb.xlsx",
+            "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "sourceType": "Excel (.xlsx/.xls)",
+        }
+    )
 
     office_error = APIError(
         response=type(
@@ -149,6 +188,11 @@ def test_fetch_rows_office_file_fallback():
 
     with patch.object(client, "_fetch_from_native_sheet", side_effect=office_error):
         with patch.object(client, "_fetch_from_office_file", return_value=fallback_rows):
+            client._resolve_file_metadata.return_value = {
+                "name": "unknown",
+                "mimeType": "application/octet-stream",
+                "sourceType": "application/octet-stream",
+            }
             rows = client.fetch_rows("fake_office_id")
 
     assert len(rows) == 1

@@ -284,6 +284,21 @@ python -m src.main
 curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/deleteWebhook?drop_pending_updates=true"
 ```
 
+### Разные файлы: Google Таблица и Excel (.xlsx) на Диске
+
+Бот читает **оба** формата, но способ разный:
+
+| Тип файла | Как видно в Google Диске | Как читает бот |
+|-----------|--------------------------|----------------|
+| **Google Таблица** | без бейджа `.XLSX` | Google Sheets API |
+| **Excel на Диске** | зелёный бейдж `.XLSX` | скачивание через Drive API + openpyxl |
+
+**Важно:** доступ сервисному аккаунту нужно выдать **на каждый файл отдельно**. Если `.xlsx` открывается, а нативная Google Таблица — нет, скорее всего расшарен только один из файлов (это разные ID).
+
+После `/reload` бот показывает **имя файла** и **тип** — сверьте, что ID в `/config` указывает на нужный файл.
+
+Email сервисного аккаунта — поле `client_email` в JSON-ключе. Добавьте его в «Настройки доступа» файла с правом **Читатель**.
+
 ### `This operation is not supported for this document. The document must not be an Office file`
 
 Файл на Google Диске загружен как **Excel (.xlsx)**, а не как нативная Google Таблица. Бот умеет читать такие файлы через Drive API, но нужно:

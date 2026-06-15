@@ -33,19 +33,32 @@ async def setup_commands_for_user(bot: Bot, user_id: int, *, is_admin: bool) -> 
     """Personal menu for a user in their private chat with the bot.
 
     Uses BotCommandScopeChat (not ChatMember — that scope is for groups only).
+    Fails silently if the user has never opened a chat with the bot (/start).
     """
     commands = ADMIN_COMMANDS if is_admin else USER_COMMANDS
-    await bot.set_my_commands(
-        commands,
-        scope=BotCommandScopeChat(chat_id=user_id),
-    )
+    try:
+        await bot.set_my_commands(
+            commands,
+            scope=BotCommandScopeChat(chat_id=user_id),
+        )
+    except Exception as exc:
+        logger.warning(
+            "Could not set commands for user %s: %s "
+            "(user must send /start to the bot first).",
+            user_id,
+            exc,
+        )
+        return
     role = "admin" if is_admin else "user"
     logger.debug("Commands set for %s %s (%d commands).", role, user_id, len(commands))
 
 
 async def clear_user_commands(bot: Bot, user_id: int) -> None:
     """Remove per-chat menu so the user falls back to the default scope."""
-    await bot.delete_my_commands(scope=BotCommandScopeChat(chat_id=user_id))
+    try:
+        await bot.delete_my_commands(scope=BotCommandScopeChat(chat_id=user_id))
+    except Exception as exc:
+        logger.warning("Could not clear commands for user %s: %s", user_id, exc)
 
 
 async def sync_bot_commands(bot: Bot, repo: Repository) -> None:

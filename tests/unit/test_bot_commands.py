@@ -40,6 +40,20 @@ async def test_setup_commands_for_admin():
     assert len(commands) == 7
 
 
+async def test_setup_commands_for_user_ignores_chat_not_found():
+    from aiogram.exceptions import TelegramBadRequest
+
+    bot = AsyncMock()
+    bot.set_my_commands = AsyncMock(
+        side_effect=TelegramBadRequest(
+            method=MagicMock(),
+            message="Bad Request: chat not found",
+        )
+    )
+    await setup_commands_for_user(bot, 99999, is_admin=False)
+    bot.set_my_commands.assert_awaited_once()
+
+
 async def test_sync_bot_commands_sets_admins(repo):
     await repo.add_user(90001, is_admin=True, name="Admin")
     await repo.add_user(90002, is_admin=False, name="User")

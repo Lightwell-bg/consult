@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 
 from aiogram import F, Router
@@ -29,6 +30,27 @@ logger = logging.getLogger(__name__)
 router = Router(name="admin")
 router.message.filter(IsAdminFilter())
 router.callback_query.filter(IsAdminFilter())
+
+_SPREADSHEET_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{10,}$")
+_SPREADSHEET_URL_RE = re.compile(
+    r"/spreadsheets/d/([a-zA-Z0-9_-]+)|open\?id=([a-zA-Z0-9_-]+)"
+)
+
+
+def _extract_spreadsheet_id(raw: str) -> str | None:
+    """ID из строки или ссылки Google Таблицы / файла на Диске."""
+    value = raw.strip()
+    if not value:
+        return None
+    if _SPREADSHEET_ID_RE.fullmatch(value):
+        return value
+    match = _SPREADSHEET_URL_RE.search(value)
+    if match:
+        return match.group(1) or match.group(2)
+    return None
+
+
+_FSM_TEXT = F.text & ~F.text.startswith("/")
 
 
 def _config_keyboard() -> InlineKeyboardMarkup:
@@ -104,8 +126,21 @@ async def cmd_reload(
             delta = count - prev_count
             sign = "+" if delta > 0 else ""
             lines.append(f"Изменение: {sign}{delta} (было {prev_count})")
+        if meta.get("name"):
+            type_label = meta.get("sourceType") or meta.get("mimeType", "")
+            lines.append(f"📁 Файл: {meta['name']}")
+            if type_label:
+                lines.append(f"📄 Тип: {type_label}")
         if meta.get("modifiedTime"):
-            lines.append(f"📄 Файл на Drive: {meta['modifiedTime']}")
+            lines.append(f"🕒 Изменён на Drive: {meta['modifiedTime']}")
+        if meta.get("warning"):
+            lines.append(f"⚠️ {meta['warning']}")
+        if meta.get("error"):
+            lines.append(f"❌ {meta['error']}")
+        if count == 0 and not meta.get("error"):
+            lines.append(
+                "⚠️ 0 записей — проверьте столбцы Раздел|Вопрос|Ответ и доступ SA к файлу."
+            )
         await message.answer("\n".join(lines))
     except Exception as exc:
         await record_critical(repo, "reload", str(exc))
@@ -328,15 +363,18 @@ async def cmd_cancel(message: Message, state: FSMContext) -> None:
         await message.answer("Нечего отменять.")
 
 
-@router.message(ConfigStates.waiting_spreadsheet_id)
+@router.message(ConfigStates.waiting_spreadsheet_id, _FSM_TEXT)
 async def cfg_save_spreadsheet(
     message: Message,
     state: FSMContext,
     repo: Repository,
 ) -> None:
-    value = (message.text or "").strip()
-    if not value or "/" in value:
-        await message.answer("Неверный формат ID. Попробуйте снова или /cancel.")
+    value = _extract_spreadsheet_id(message.text or "")
+    if not value:
+        await message.answer(
+            "Неверный формат ID. Вставьте ID или ссылку на таблицу.\n"
+            "Или /cancel для отмены."
+        )
         return
     await repo.set_setting("spreadsheet_id", value)
     await state.clear()
@@ -347,7 +385,7 @@ async def cfg_save_spreadsheet(
     )
 
 
-@router.message(ConfigStates.waiting_sync_interval)
+@router.message(ConfigStates.waiting_sync_interval, _FSM_TEXT)
 async def cfg_save_interval(
     message: Message,
     state: FSMContext,
@@ -387,7 +425,7 @@ async def cfg_save_interval(
     )
 
 
-@router.message(ConfigStates.waiting_max_context)
+@router.message(ConfigStates.waiting_max_context, _FSM_TEXT)
 async def cfg_save_context(
     message: Message,
     state: FSMContext,
@@ -410,7 +448,7 @@ async def cfg_save_context(
     )
 
 
-@router.message(ConfigStates.waiting_search_top_k)
+@router.message(ConfigStates.waiting_search_top_k, _FSM_TEXT)
 async def cfg_save_search_top_k(
     message: Message,
     state: FSMContext,
@@ -433,7 +471,7 @@ async def cfg_save_search_top_k(
     )
 
 
-@router.message(ConfigStates.waiting_log_retention_days)
+@router.message(ConfigStates.waiting_log_retention_days, _FSM_TEXT)
 async def cfg_save_log_retention(
     message: Message,
     state: FSMContext,

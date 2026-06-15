@@ -75,9 +75,15 @@ async def send_formatted(message: Message, text: str) -> None:
 
 
 async def safe_edit_text(message: Message, text: str, **kwargs) -> None:
-    """edit_text без падения, если Telegram считает сообщение неизменённым."""
+    """edit_text без падения на «не изменено» и битом markdown/HTML."""
     try:
         await message.edit_text(text, **kwargs)
     except TelegramBadRequest as exc:
-        if "message is not modified" not in (exc.message or "").lower():
-            raise
+        msg = (exc.message or "").lower()
+        if "message is not modified" in msg:
+            return
+        if "can't parse entities" in msg or "parse entities" in msg:
+            plain = {k: v for k, v in kwargs.items() if k != "parse_mode"}
+            await message.edit_text(text, **plain)
+            return
+        raise

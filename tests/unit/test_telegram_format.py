@@ -46,6 +46,23 @@ def test_escapes_html_special_chars():
 
 
 @pytest.mark.asyncio
+async def test_safe_edit_text_falls_back_on_parse_error():
+    msg = MagicMock()
+    msg.edit_text = AsyncMock(
+        side_effect=[
+            TelegramBadRequest(
+                method=MagicMock(),
+                message="Bad Request: can't parse entities",
+            ),
+            None,
+        ]
+    )
+    await safe_edit_text(msg, "broken _ markdown", parse_mode="Markdown")
+    assert msg.edit_text.await_count == 2
+    assert "parse_mode" not in msg.edit_text.call_args_list[1].kwargs
+
+
+@pytest.mark.asyncio
 async def test_safe_edit_text_ignores_not_modified():
     msg = MagicMock()
     msg.edit_text = AsyncMock(

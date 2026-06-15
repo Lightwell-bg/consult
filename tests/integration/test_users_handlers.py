@@ -1,6 +1,8 @@
+import html
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, Message, User as TGUser
@@ -28,6 +30,42 @@ def _state_with(**data) -> MagicMock:
     state.get_data = AsyncMock(return_value=data)
     state.clear = AsyncMock()
     return state
+
+
+async def test_user_create_survives_chat_not_found(repo):
+    from aiogram.exceptions import TelegramBadRequest
+
+    cb = _callback("usr:pick_role:0")
+    cb.bot.set_my_commands = AsyncMock(
+        side_effect=TelegramBadRequest(
+            method=MagicMock(),
+            message="Bad Request: chat not found",
+        )
+    )
+    state = _state_with(new_user_id=555010, new_user_name="New User")
+    await user_create(cb, state=state, repo=repo)
+
+    user = await repo.get_user(555010)
+    assert user is not None
+    assert user.name == "New User"
+    cb.message.edit_text.assert_called_once()
+
+
+async def test_render_users_list_special_chars_in_name(repo):
+    from src.bot.handlers.users import _render_users_list
+
+    await repo.add_user(555020, is_admin=False, name="Test_User (sales)")
+    await repo.add_user(555021, is_admin=True, name="Admin*Star")
+
+    msg = MagicMock(spec=Message)
+    msg.answer = AsyncMock()
+    await _render_users_list(msg, repo)
+
+    msg.answer.assert_awaited_once()
+    sent = msg.answer.call_args.args[0]
+    assert msg.answer.call_args.kwargs.get("parse_mode") == ParseMode.HTML
+    assert html.escape("Test_User (sales)") in sent
+    assert html.escape("Admin*Star") in sent
 
 
 async def test_user_create_adds_employee_with_name(repo):

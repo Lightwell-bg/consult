@@ -133,8 +133,8 @@ docker compose run --rm bot python scripts/seed_admin.py 123456789 --admin
 
 Если бот ещё не собирался — сначала соберите образ:
 ```bash
-docker compose build
-docker compose run --rm bot python scripts/seed_admin.py 123456789 --admin
+sudo docker compose build
+sudo docker compose run --rm bot python scripts/seed_admin.py 123456789 --admin
 ```
 
 ---
@@ -143,12 +143,12 @@ docker compose run --rm bot python scripts/seed_admin.py 123456789 --admin
 
 ```bash
 cd /opt/consult
-docker compose up -d
+sudo docker compose up -d
 ```
 
 Проверить статус:
 ```bash
-docker compose ps
+sudo docker compose ps
 ```
 
 ---
@@ -174,7 +174,7 @@ docker compose stop
 ### Перезапустить бота
 
 ```bash
-docker compose restart bot
+sudo docker compose restart bot
 ```
 
 ### Обновить код и перезапустить
@@ -182,15 +182,15 @@ docker compose restart bot
 ```bash
 cd /opt/consult
 git pull
-docker compose build
-docker compose up -d
+sudo docker compose build
+sudo docker compose up -d
 ```
 
 ### Просмотр состояния контейнера
 
 ```bash
-docker compose ps
-docker stats consult-bot-1
+sudo docker compose ps
+sudo docker stats consult-bot-1
 ```
 
 ---
@@ -270,6 +270,40 @@ docker compose logs bot
 
 1. Убедитесь, что ваш Telegram ID в белом списке (`/whoami` → `seed_admin.py`).
 2. Проверьте, что база знаний загружена (`/status` в боте).
+
+### «Неверный формат ID» на любую команду (/start, /status)
+
+Бот застрял в режиме ввода ID таблицы (`/config` → ID таблицы). Команды с `/` ошибочно принимались за ID.
+
+**Сейчас (до обновления образа):** перезапустите контейнер — сбросит состояние:
+```bash
+docker compose restart bot
+```
+Затем `/cancel` или снова `/start`.
+
+**После обновления кода:** команды работают нормально; можно вставлять и ссылку на таблицу целиком.
+
+### Какие логи прислать для диагностики
+
+На VPS в каталоге проекта:
+
+```bash
+# Последние 200 строк лога контейнера
+docker compose logs bot --tail 200
+
+# Логи с момента последнего запуска + ошибки
+docker compose logs bot --tail 500 2>&1 | grep -iE 'error|warning|exception|failed|KB|sync|reload'
+
+# Статус контейнера
+docker compose ps
+
+# Проверка, что файлы на месте
+ls -la data/bot.db credentials/
+```
+
+В самом боте (если отвечает): `/logs` — критические ошибки из SQLite.
+
+Пришлите вывод этих команд — особенно строки с `ERROR`, `Initial KB sync`, `reload`, `Drive API`, `403`.
 
 ### Ошибка доступа к Google Sheets
 
